@@ -44,3 +44,16 @@ async function addMessage(message) {
 browser.runtime.onMessage.addListener((message) => {
   addMessage(message);
 });
+
+function middleClickInterceptor(e) {
+    if(e.which === 2) {
+        var relevantAnchor = e.target.closest("a");
+        if(relevantAnchor !== null) {
+            e.preventDefault();
+            browser.runtime.sendMessage({"method":"middleClick", "target":relevantAnchor.href});
+        }
+    }
+}
+
+window.addEventListener("click", middleClickInterceptor);
+

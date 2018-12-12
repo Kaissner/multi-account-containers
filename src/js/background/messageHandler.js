@@ -7,7 +7,7 @@ const messageHandler = {
 
   init() {
     // Handles messages from webextension code
-    browser.runtime.onMessage.addListener((m) => {
+    browser.runtime.onMessage.addListener((m,s) => {
       let response;
 
       switch (m.method) {
@@ -67,6 +67,9 @@ const messageHandler = {
         break;
       case "exemptContainerAssignment":
         response = assignManager._exemptTab(m);
+        break;
+      case "middleClick":
+        assignManager.openInNewTab(s.tab.id,m.target);
         break;
       }
       return response;

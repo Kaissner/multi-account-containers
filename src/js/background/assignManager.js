@@ -15,6 +15,17 @@ const assignManager = {
       return `${storagePrefix}${url.hostname}`;
     },
 
+    getTransitionStoreKey(sourceContainerId, pageUrl) {
+      const url = new window.URL(pageUrl);
+      const storagePrefix = "siteTransition@@_";
+      return `${storagePrefix}${sourceContainerId}@@_${url.hostname}`;
+    },
+
+    getDefaultTransitionStoreKey(sourceContainerId) {
+      const storagePrefix = "siteTransition@@_";
+      return `${storagePrefix}${sourceContainerId}@@_default`;
+    },
+
     setExempted(pageUrl, tabId) {
       const siteStoreKey = this.getSiteStoreKey(pageUrl);
       if (!(siteStoreKey in this.exemptedTabs)) {
@@ -50,6 +61,24 @@ const assignManager = {
       });
     },
 
+    getTransitionSettings(sourceContainerId, pageUrl) {
+      const transitionStoreKey = this.getTransitionStoreKey(sourceContainerId, pageUrl);
+      const defaultTransitionKey = this.getDefaultTransitionStoreKey(sourceContainerId);
+      return new Promise((resolve, reject) => {
+        this.area.get([transitionStoreKey,defaultTransitionKey]).then((storageResponse) => {
+          if (storageResponse && transitionStoreKey in storageResponse) {
+            resolve(storageResponse[transitionStoreKey]);
+          } else if(storageResponse && defaultTransitionKey in storageResponse) {
+            resolve(storageResponse[defaultTransitionKey]);
+          } else {
+            resolve({userContextId:sourceContextId, neverAsk:true});
+          }
+        }).catch((e) => {
+          reject(e);
+        });
+      });
+    },
+
     set(pageUrl, data, exemptedTabIds) {
       const siteStoreKey = this.getSiteStoreKey(pageUrl);
       if (exemptedTabIds) {
@@ -67,6 +96,16 @@ const assignManager = {
       // When we remove an assignment we should clear all the exemptions
       this.removeExempted(pageUrl);
       return this.area.remove([siteStoreKey]);
+    },
+
+    setTransitionSettings(sourceContainerId, pageUrl, data) {
+      if(pageUrl) {
+        const transitionStoreKey = this.getTransitionStoreKey(sourceContainerId, pageUrl);
+        return this.area.set({ [transitionStoreKey]: data });
+      } else {
+        const defaultTransitionKey = this.getDefaultTransitionStoreKey(sourceContainerId);
+        return this.area.set({ [defaultTransitionKey]: data });
+      }
     },
 
     async deleteContainer(userContextId) {
@@ -112,6 +151,37 @@ const assignManager = {
     this.storageArea.setExempted(pageUrl, m.tabId);
     return true;
   },
+  async computeSiteSettings(sourceContextId, url) {
+    if(sourceContextId === false) {
+      const siteSettings = await this.storageArea.get(url);
+      if(siteSettings) {
+        return siteSettings;
+      } else {
+        return {userContextId:false, neverAsk:true};
+      }
+    } else {
+      const siteSettings = await this.storageArea.getTransitionSettings(sourceContextId, url);
+      if(siteSettings) {
+        return siteSettings;
+      } else {
+        return {userContextId:sourceContextId, neverAsk:true};
+      }
+    }
+  },
+  async openInNewTab(sourceTabId, url) {
+    const tab = await browser.tabs.get(sourceTabId);
+    const sourceContextId = this.getUserContextIdFromCookieStore(tab);
+    const siteSettings = await this.computeSiteSettings(sourceContextId, url);
+    this.reloadPageInContainer(
+      url,
+      sourceContextId,
+      siteSettings.userContextId,
+      null,
+      false,
+      siteSettings.neverAsk,
+      sourceTabId
+    );
+  },
 
   // Before a request is handled by the browser we decide if we should route through a different container
   async onBeforeRequest(options) {
@@ -119,10 +189,12 @@ const assignManager = {
       return {};
     }
     this.removeContextMenu();
-    const [tab, siteSettings] = await Promise.all([
-      browser.tabs.get(options.tabId),
-      this.storageArea.get(options.url)
-    ]);
+
+    // need to sequence these requests now
+    const tab = await browser.tabs.get(options.tabId);
+    const userContextId = this.getUserContextIdFromCookieStore(tab);
+    const siteSettings = await computeSiteSettings(userContextId, options.url);
+
     let container;
     try {
       container = await browser.contextualIdentities.get(backgroundLogic.cookieStoreId(siteSettings.userContextId));
@@ -153,7 +225,6 @@ const assignManager = {
       }
     }
 
-    const userContextId = this.getUserContextIdFromCookieStore(tab);
     if (!siteSettings
         || userContextId === siteSettings.userContextId
         || tab.incognito
@@ -434,7 +505,9 @@ const assignManager = {
     // False represents assignment is not permitted
     // If the user has explicitly checked "Never Ask Again" on the warning page we will send them straight there
     if (neverAsk) {
-      browser.tabs.create({url, cookieStoreId, index, active, openerTabId});
+      browser.tabs.create({url, cookieStoreId, index, active, openerTabId}).then( (t) => {
+            this.storageArea.setExempted(url,t.id);
+       } );
     } else {
       let confirmUrl = `${loadPage}?url=${this.encodeURLProperty(url)}&cookieStoreId=${cookieStoreId}`;
       let currentCookieStoreId;
