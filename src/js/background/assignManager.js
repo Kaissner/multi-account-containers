@@ -71,7 +71,7 @@ const assignManager = {
           } else if(storageResponse && defaultTransitionKey in storageResponse) {
             resolve(storageResponse[defaultTransitionKey]);
           } else {
-            resolve({userContextId:sourceContextId, neverAsk:true});
+            resolve({userContextId:sourceContainerId, neverAsk:true});
           }
         }).catch((e) => {
           reject(e);
