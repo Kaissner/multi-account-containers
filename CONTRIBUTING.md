@@ -1,17 +1,10 @@
-# Contributing
-
-Everyone is welcome to contribute to containers. Reach out to team members if you have questions:
-
-- IRC: #containers on irc.mozilla.org
-- Email: containers@mozilla.com
-
 ## Filing bugs
 
-If you find a bug with containers, please file a issue.
+If you find a bug with enhanced containers, please file a issue.
 
-Check first if the bug might already exist: https://github.com/mozilla/multi-account-containers/issues
+Check first if the bug might already exist: https://github.com/blackhole89/multi-account-containers/issues
 
-[Open an issue](https://github.com/mozilla/multi-account-containers/issues/new)
+[Open an issue](https://github.com/blackhole89/multi-account-containers/issues/new)
 
 1. Visit about:support
 2. Click "Copy raw data to clipboard" and paste into the bug. Alternatively copy the following sections into the issue:
