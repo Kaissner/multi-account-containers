@@ -447,11 +447,6 @@ const assignManager = {
   },
 
   async _setOrRemoveTransitionSettings(tabId, sourceContainerId, pageUrl, userContextId, remove) {
-    // https://github.com/mozilla/testpilot-containers/issues/626
-    // Context menu has stored context IDs as strings, so we need to coerce
-    // the value to a string for accurate checking
-    //userContextId = Number(userContextId);
-
     if (!remove) {
       await this.storageArea.setTransitionSettings(sourceContainerId, pageUrl, {
         userContextId,

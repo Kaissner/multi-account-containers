@@ -410,29 +410,18 @@ const Logic = {
     }
   },
 
-  renderTransitionRules(element,page) {
-     const fragment = document.createDocumentFragment();
-
-     const tr_in = document.createElement("tr");
-     this._identities.forEach(identity => {
-       const td_in = document.createElement("td");
-       const td_out= document.createElement("td");
-
-       td_in.title = escaped`When opened from ${identity.name}...`;
-       td_in.innerHTML = escaped`
-         <div class="userContext-icon-wrapper open-newtab" style="margin:0px">
-           <div class="usercontext-icon"
+  renderIdentityIcon(identity) {
+    if(identity && identity.icon) {
+      return escaped`<div class="usercontext-icon"
               data-identity-icon="${identity.icon}"
-              data-identity-color="${identity.color}" style="background-color: ${identity.color}">
-           </div>
-         </div>`;
-
-   
-       tr_in.appendChild(td_in);
-     });
-
-     fragment.appendChild(tr_in);
-     element.appendChild(fragment);
+              data-identity-color="${identity.color}" style="width:24px">
+            </div>`;
+    } else {
+      return escaped`<div class="usercontext-icon"
+            data-identity-icon="circle"
+            style="--identity-tab-color: #ffffff !important; --identity-icon-color: #ffffff !important;width:24px">
+          </div>`;
+    }
   },
 };
 
@@ -583,6 +572,15 @@ Logic.registerPanel(P_CONTAINERS_LIST, {
       await this.startEditTransitions();
     });
 
+    Logic.addEnterHandler(document.querySelector("#finish-editing-rules-link"), async () => {
+      await this.finishEditTransitions();
+    });
+
+    Logic.addEnterHandler(document.querySelector("#reset-rules-link"), async () => {
+      await this.resetTransitionRules();
+      await this.finishEditTransitions();
+    });
+
     document.addEventListener("keydown", (e) => {
       const selectables = [...document.querySelectorAll("[tabindex='0'], [tabindex='-1']")];
       const element = document.activeElement;
@@ -678,6 +676,8 @@ Logic.registerPanel(P_CONTAINERS_LIST, {
   },
 
   async startEditTransitions() {
+    document.querySelector(".transitions").setAttribute("hidden","1");
+    document.querySelector(".transitions-edit").removeAttribute("hidden");
     const currentTab = await Logic.currentTab();
     Logic.identities().forEach(async identity => {
       const tbtn = document.getElementById(escaped`ctx${identity.cookieStoreId}t`);
@@ -686,13 +686,27 @@ Logic.registerPanel(P_CONTAINERS_LIST, {
       const targetIdentity = Logic.identityByUserContextId(siteSettings.userContextId); 
 
       tbtn.parentNode.removeAttribute("hidden");
-      tbtn.innerHTML=escaped`
+      tbtn.innerHTML=`
         <div class="userContext-icon-wrapper clickable-no-icon-change pick-transition">
-          <div class="usercontext-icon"
-            data-identity-icon="${targetIdentity.icon}"
-            data-identity-color="${targetIdentity.color}" style="width:24px">
-          </div>
+          ${Logic.renderIdentityIcon(targetIdentity)}
         </div>`;
+    });
+  },
+
+  async resetTransitionRules() {
+    const currentTab = await Logic.currentTab();
+    Logic.identities().forEach(async identity => {
+      Logic.setOrRemoveTransitionSettings(currentTab.id, Logic.userContextId(identity.cookieStoreId), currentTab.url, false, true);
+    });
+  }, 
+
+  async finishEditTransitions() {
+    document.querySelector(".transitions-edit").setAttribute("hidden","1");
+    document.querySelector(".transitions").removeAttribute("hidden");
+
+    Logic.identities().forEach(async identity => {
+      const tbtn = document.getElementById(escaped`ctx${identity.cookieStoreId}t`);
+      tbtn.parentNode.setAttribute("hidden","1");
     });
   },
 
@@ -867,7 +881,9 @@ Logic.registerPanel(P_TRANSITION_TARGET, {
     context.classList.add("userContext-wrapper", "choose-target", "clickable-no-icon-change");
     context.setAttribute("tabindex", "0");
     context.title = escaped`Open in default container`;
-    context.innerHTML = escaped`Default container`;
+    context.innerHTML = `<div class="userContext-icon-wrapper choose-target">
+                           ${Logic.renderIdentityIcon(null)}
+                         </div><div class="container-name truncate-text">Default container</div>`;
 
     fragment.appendChild(tr);
 
