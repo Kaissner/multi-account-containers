@@ -76,6 +76,7 @@ const Logic = {
   _previousPanel: null,
   _panels: {},
   _onboardingVariation: null,
+  _transitionEditMode: null,
 
   async init() {
     // Remove browserAction "upgraded" badge when opening panel
@@ -215,7 +216,7 @@ const Logic = {
     const cookieStoreId = this.cookieStoreId(userContextId);
     return this._identities.find( identity => { return identity.cookieStoreId === cookieStoreId; } );
   },
-
+  
   async currentTab() {
     const activeTabs = await browser.tabs.query({active: true, windowId: browser.windows.WINDOW_ID_CURRENT});
     if (activeTabs.length > 0) {
@@ -317,6 +318,14 @@ const Logic = {
     return this._identities;
   },
 
+  transitionEditMode() {
+    return this._transitionEditMode;
+  },
+
+  setTransitionEditMode(m) {
+    this._transitionEditMode = m;
+  },
+
   currentIdentity() {
     if (!this._currentIdentity) {
       throw new Error("CurrentIdentity must be set before calling Logic.currentIdentity.");
@@ -345,18 +354,17 @@ const Logic = {
     });
   },
 
-  getTransitionSettings(sourceContainerId,tab) {
+  getTransitionSettings(sourceContainerId, url) {
     return browser.runtime.sendMessage({
       method: "getTransitionSettings",
       sourceContainerId: sourceContainerId,
-      tabId: tab.id
+      url: url
     });
   },
 
-  setOrRemoveTransitionSettings(tabId, sourceContainerId, url, userContextId, value) {
+  setOrRemoveTransitionSettings(sourceContainerId, url, userContextId, value) {
     return browser.runtime.sendMessage({
       method: "setOrRemoveTransitionSettings",
-      tabId,
       sourceContainerId,
       url,
       userContextId,
@@ -572,9 +580,18 @@ Logic.registerPanel(P_CONTAINERS_LIST, {
       await this.startEditTransitions();
     });
 
+    Logic.addEnterHandler(document.querySelector("#edit-default-rules-link"), async () => {
+      await this.startEditDefaults();
+    });
+
     Logic.addEnterHandler(document.querySelector("#finish-editing-rules-link"), async () => {
       await this.finishEditTransitions();
     });
+
+    Logic.addEnterHandler(document.querySelector("#finish-editing-defaults-link"), async () => {
+      await this.finishEditTransitions();
+    });
+
 
     Logic.addEnterHandler(document.querySelector("#reset-rules-link"), async () => {
       await this.resetTransitionRules();
@@ -672,16 +689,25 @@ Logic.registerPanel(P_CONTAINERS_LIST, {
       currentContainer.innerText = identity.name;
 
       currentContainer.setAttribute("data-identity-color", identity.color);
+    
+      const url = new window.URL(currentTab.url); 
+      if (url.protocol === "about:"
+          || url.protocol === "moz-extension:"
+          || currentTab.incognito) {  
+        document.getElementById("edit-transition-rules-button").setAttribute("hidden","1");
+      }   
+
     }
   },
 
   async startEditTransitions() {
+    Logic.setTransitionEditMode(1);
     document.querySelector(".transitions").setAttribute("hidden","1");
     document.querySelector(".transitions-edit").removeAttribute("hidden");
     const currentTab = await Logic.currentTab();
     Logic.identities().forEach(async identity => {
       const tbtn = document.getElementById(escaped`ctx${identity.cookieStoreId}t`);
-      const siteSettings = await Logic.getTransitionSettings(Logic.userContextId(identity.cookieStoreId),currentTab);
+      const siteSettings = await Logic.getTransitionSettings(Logic.userContextId(identity.cookieStoreId),currentTab.url);
  
       const targetIdentity = Logic.identityByUserContextId(siteSettings.userContextId); 
 
@@ -693,14 +719,35 @@ Logic.registerPanel(P_CONTAINERS_LIST, {
     });
   },
 
+  async startEditDefaults() {
+    Logic.setTransitionEditMode(0);
+    document.querySelector(".transitions").setAttribute("hidden","1");
+    document.querySelector(".transitions-edit-defaults").removeAttribute("hidden");
+    const currentTab = await Logic.currentTab();
+    Logic.identities().forEach(async identity => {
+      const tbtn = document.getElementById(escaped`ctx${identity.cookieStoreId}t`);
+      const siteSettings = await Logic.getTransitionSettings(Logic.userContextId(identity.cookieStoreId),"");
+ 
+      const targetIdentity = Logic.identityByUserContextId(siteSettings.userContextId); 
+
+      tbtn.parentNode.removeAttribute("hidden");
+      tbtn.innerHTML=`
+        <div class="userContext-icon-wrapper clickable-no-icon-change pick-transition">
+          ${Logic.renderIdentityIcon(targetIdentity)}
+        </div>`;
+    });
+  },
+
+
   async resetTransitionRules() {
     const currentTab = await Logic.currentTab();
     Logic.identities().forEach(async identity => {
-      Logic.setOrRemoveTransitionSettings(currentTab.id, Logic.userContextId(identity.cookieStoreId), currentTab.url, false, true);
+      Logic.setOrRemoveTransitionSettings(Logic.userContextId(identity.cookieStoreId), currentTab.url, false, true);
     });
   }, 
 
   async finishEditTransitions() {
+    document.querySelector(".transitions-edit-defaults").setAttribute("hidden","1");
     document.querySelector(".transitions-edit").setAttribute("hidden","1");
     document.querySelector(".transitions").removeAttribute("hidden");
 
@@ -812,21 +859,33 @@ Logic.registerPanel(P_TRANSITION_TARGET, {
   // This method is called when the object is registered.
   async initialize() {
     Logic.addEnterHandler(document.querySelector("#close-transition-target-panel"), async () => {
-      await Logic.showPreviousPanel();
-      // TODO: this is extremely fishy; add proper way of messaging panel 
-      await Logic._panels[Logic._currentPanel].startEditTransitions();
+      await this.goBack();
     });
 
   },
-
+  async goBack() {
+    if(Logic.transitionEditMode()) {
+      await Logic.showPreviousPanel();
+      // TODO: this is extremely fishy; add proper way of messaging panel 
+      await Logic._panels[Logic._currentPanel].startEditTransitions();
+    } else {
+      await Logic.showPreviousPanel();
+      // TODO: this is extremely fishy; add proper way of messaging panel 
+      await Logic._panels[Logic._currentPanel].startEditDefaults();      
+    }
+  },
   // This method is called when the panel is shown.
   async prepare() {
     const identity = Logic.currentIdentity();
     const currentTab = await Logic.currentTab();
     
     // Populating the panel: current URL
-    const url = new window.URL(currentTab.url);
-    document.getElementById("target-url").textContent = url.hostname;
+    if(Logic.transitionEditMode()) {
+      const url = new window.URL(currentTab.url);
+      document.getElementById("target-url").textContent = "For URL: " + url.hostname;
+    } else {
+      document.getElementById("target-url").textContent = "Default to use when no specific rules";
+    }
   
     // Populating the panel: name and icon
     document.getElementById("source-container-name").textContent = identity.name;
@@ -861,14 +920,20 @@ Logic.registerPanel(P_TRANSITION_TARGET, {
 
       tr.appendChild(context);
 
-      Logic.addEnterHandler(tr, async function (e) {
+      Logic.addEnterHandler(tr, async (e) => {
         if (e.target.matches(".choose-target")
             || e.target.parentNode.matches(".choose-target")
             || e.type === "keydown") {
-          Logic.setOrRemoveTransitionSettings(currentTab.id, Logic.userContextId(Logic.currentIdentity().cookieStoreId), currentTab.url, Logic.userContextId(identity.cookieStoreId), false);
-          await Logic.showPreviousPanel();
-          // TODO: another instance of fishiness
-          await Logic._panels[Logic._currentPanel].startEditTransitions();
+          if(Logic.transitionEditMode()) {
+            Logic.setOrRemoveTransitionSettings(Logic.userContextId(Logic.currentIdentity().cookieStoreId),
+                                                currentTab.url, Logic.userContextId(identity.cookieStoreId), false);
+          
+          } else {
+            Logic.setOrRemoveTransitionSettings(Logic.userContextId(Logic.currentIdentity().cookieStoreId), 
+                                                "", Logic.userContextId(identity.cookieStoreId), false);
+          
+          }
+          this.goBack();
         }
       });
     });
@@ -889,14 +954,16 @@ Logic.registerPanel(P_TRANSITION_TARGET, {
 
     tr.appendChild(context);
 
-    Logic.addEnterHandler(tr, async function (e) {
+    Logic.addEnterHandler(tr, async (e) => {
         if (e.target.matches(".choose-target")
             || e.target.parentNode.matches(".choose-target")
             || e.type === "keydown") {
-          Logic.setOrRemoveTransitionSettings(currentTab.id, Logic.userContextId(Logic.currentIdentity().cookieStoreId), currentTab.url, false, false);
-          await Logic.showPreviousPanel();
-          // TODO: another instance of fishiness
-          await Logic._panels[Logic._currentPanel].startEditTransitions();
+          if(Logic.transitionEditMode()) {
+            Logic.setOrRemoveTransitionSettings(Logic.userContextId(Logic.currentIdentity().cookieStoreId), currentTab.url, false, false);
+          } else { 
+            Logic.setOrRemoveTransitionSettings(Logic.userContextId(Logic.currentIdentity().cookieStoreId), "", false, false);
+          }
+          this.goBack();
         }
     });
 

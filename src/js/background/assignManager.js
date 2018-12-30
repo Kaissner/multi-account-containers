@@ -61,22 +61,36 @@ const assignManager = {
       });
     },
 
-    getTransitionSettings(sourceContainerId, pageUrl) {
-      const transitionStoreKey = this.getTransitionStoreKey(sourceContainerId, pageUrl);
+    getTransitionSettings(sourceContainerId, pageUrl) { console.log(`gTS(${sourceContainerId},${pageUrl})`);
       const defaultTransitionKey = this.getDefaultTransitionStoreKey(sourceContainerId);
-      return new Promise((resolve, reject) => {
-        this.area.get([transitionStoreKey,defaultTransitionKey]).then((storageResponse) => { 
-          if (storageResponse && transitionStoreKey in storageResponse) {
-            resolve(storageResponse[transitionStoreKey]);
-          } else if(storageResponse && defaultTransitionKey in storageResponse) {
-            resolve(storageResponse[defaultTransitionKey]);
-          } else {
-            resolve({userContextId:sourceContainerId, neverAsk:true});
-          } 
-        }).catch((e) => { 
-          reject(e);
+      if(!pageUrl) {
+        return new Promise((resolve, reject) => {
+          this.area.get([defaultTransitionKey]).then((storageResponse) => { 
+            if(storageResponse && defaultTransitionKey in storageResponse) {
+              resolve(storageResponse[defaultTransitionKey]);
+            } else {
+              resolve({userContextId:sourceContainerId, neverAsk:true});
+            } 
+          }).catch((e) => { 
+            reject(e);
+          });
+        }); 
+      } else {
+        const transitionStoreKey = this.getTransitionStoreKey(sourceContainerId, pageUrl);
+        return new Promise((resolve, reject) => {
+          this.area.get([transitionStoreKey,defaultTransitionKey]).then((storageResponse) => { 
+            if (storageResponse && transitionStoreKey in storageResponse) {
+              resolve(storageResponse[transitionStoreKey]);
+            } else if(storageResponse && defaultTransitionKey in storageResponse) {
+              resolve(storageResponse[defaultTransitionKey]);
+            } else {
+              resolve({userContextId:sourceContainerId, neverAsk:true});
+            } 
+          }).catch((e) => { 
+            reject(e);
+          });
         });
-      });
+      }
     },
 
     set(pageUrl, data, exemptedTabIds) {
@@ -446,7 +460,7 @@ const assignManager = {
     return false;
   },
 
-  async _setOrRemoveTransitionSettings(tabId, sourceContainerId, pageUrl, userContextId, remove) {
+  async _setOrRemoveTransitionSettings(sourceContainerId, pageUrl, userContextId, remove) {
     if (!remove) {
       await this.storageArea.setTransitionSettings(sourceContainerId, pageUrl, {
         userContextId,
@@ -455,18 +469,13 @@ const assignManager = {
     } else {
       await this.storageArea.removeTransitionSettings(sourceContainerId, pageUrl);
     } 
-    browser.tabs.sendMessage(tabId, {
-      text: `Successfully updated transition rules for ${pageUrl}.`
-    });
-    const tab = await browser.tabs.get(tabId);
-    this.calculateContextMenu(tab);
   },
 
-  async _getTransitionSettings(sourceContainerId,tab) {
-    if (this.isTabPermittedAssign(tab)) {
-      return await this.storageArea.getTransitionSettings(sourceContainerId,tab.url);
-    } 
-    return false;
+  async _getTransitionSettings(sourceContainerId, pageUrl) {
+    //if (this.isTabPermittedAssign(tab)) {
+      return await this.storageArea.getTransitionSettings(sourceContainerId,pageUrl);
+    //} 
+    //return false;
   },
 
   _getByContainer(userContextId) {
