@@ -35,6 +35,16 @@ const messageHandler = {
           return assignManager._setOrRemoveAssignment(tab.id, m.url, m.userContextId, m.value);
         });
         break;
+      case "getTransitionSettings":
+        response = browser.tabs.get(m.tabId).then((tab) => {
+          return assignManager._getTransitionSettings(m.sourceContainerId,tab);
+        });
+        break;
+      case "setOrRemoveTransitionSettings":
+        response = browser.tabs.get(m.tabId).then((tab) => {
+          return assignManager._setOrRemoveTransitionSettings(tab.id, m.sourceContainerId, m.url, m.userContextId, m.value);
+        });
+        break;
       case "sortTabs":
         backgroundLogic.sortTabs();
         break;

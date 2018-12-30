@@ -306,7 +306,7 @@ const backgroundLogic = {
   cookieStoreId(userContextId) {
     if(userContextId)
       return `firefox-container-${userContextId}`;
-    else return undefined;
+    else return `firefox-default`; // NOT undefined
   }
 };
 

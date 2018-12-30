@@ -65,15 +65,15 @@ const assignManager = {
       const transitionStoreKey = this.getTransitionStoreKey(sourceContainerId, pageUrl);
       const defaultTransitionKey = this.getDefaultTransitionStoreKey(sourceContainerId);
       return new Promise((resolve, reject) => {
-        this.area.get([transitionStoreKey,defaultTransitionKey]).then((storageResponse) => {
+        this.area.get([transitionStoreKey,defaultTransitionKey]).then((storageResponse) => { 
           if (storageResponse && transitionStoreKey in storageResponse) {
             resolve(storageResponse[transitionStoreKey]);
           } else if(storageResponse && defaultTransitionKey in storageResponse) {
             resolve(storageResponse[defaultTransitionKey]);
           } else {
             resolve({userContextId:sourceContainerId, neverAsk:true});
-          }
-        }).catch((e) => {
+          } 
+        }).catch((e) => { 
           reject(e);
         });
       });
@@ -99,6 +99,7 @@ const assignManager = {
     },
 
     setTransitionSettings(sourceContainerId, pageUrl, data) {
+      console.log(`setTransitionSettings(${sourceContainerId},${pageUrl},${JSON.stringify(data)})`);
       if(pageUrl) {
         const transitionStoreKey = this.getTransitionStoreKey(sourceContainerId, pageUrl);
         return this.area.set({ [transitionStoreKey]: data });
@@ -106,6 +107,15 @@ const assignManager = {
         const defaultTransitionKey = this.getDefaultTransitionStoreKey(sourceContainerId);
         return this.area.set({ [defaultTransitionKey]: data });
       }
+    },
+
+    removeTransitionSettings(sourceContainerId, pageUrl) {
+       if(pageUrl) {
+         const transitionStoreKey = this.getTransitionStoreKey(sourceContainerId, pageUrl);
+         return this.area.remove([transitionStoreKey]);
+       } else { 
+         // do not remove default transition settings
+       }
     },
 
     async deleteContainer(userContextId) {
@@ -152,6 +162,7 @@ const assignManager = {
     return true;
   },
   async computeSiteSettings(sourceContextId, url) {
+    console.log(`computeSiteSettings(${sourceContextId},${url})`);
     if(sourceContextId === false) {
       const siteSettings = await this.storageArea.get(url);
       if(siteSettings) {
@@ -169,9 +180,10 @@ const assignManager = {
     }
   },
   async openInNewTab(sourceTabId, url) {
+    console.log(`openInNewTab(${sourceTabId},${url})`);
     const tab = await browser.tabs.get(sourceTabId);
     const sourceContextId = this.getUserContextIdFromCookieStore(tab);
-    const siteSettings = await this.computeSiteSettings(sourceContextId, url);
+    const siteSettings = await this.computeSiteSettings(sourceContextId, url); 
     this.reloadPageInContainer(
       url,
       sourceContextId,
@@ -185,30 +197,32 @@ const assignManager = {
 
   // Before a request is handled by the browser we decide if we should route through a different container
   async onBeforeRequest(options) {
+    console.log(`onBeforeRequest(${JSON.stringify(options)})`);
     if (options.frameId !== 0 || options.tabId === -1) {
       return {};
     }
     this.removeContextMenu();
 
     // need to sequence these requests now
-    const tab = await browser.tabs.get(options.tabId);
-    const userContextId = this.getUserContextIdFromCookieStore(tab);
-    const siteSettings = await computeSiteSettings(userContextId, options.url);
-
+    const tab = await browser.tabs.get(options.tabId); 
+    const userContextId = this.getUserContextIdFromCookieStore(tab); 
+    const siteSettings = await this.computeSiteSettings(userContextId, options.url);
+    
     let container;
     try {
       container = await browser.contextualIdentities.get(backgroundLogic.cookieStoreId(siteSettings.userContextId));
     } catch (e) {
       container = false;
     }
-
+    
     // The container we have in the assignment map isn't present any more so lets remove it
     //   then continue the existing load
-    if (siteSettings && !container) {
+    // Don't wipe if userContextId=false (i.e. we are told to transition to default)!
+    if (siteSettings && siteSettings.userContextId && !container) {
       this.deleteContainer(siteSettings.userContextId);
       return {};
     }
-
+    
     // If a page has been opened in a nonstandard container, the exemption flag for that
     //   tab will have been set, so following links in the same tab will not trigger new
     //   prompts about the container in which to open the page. However, opening links
@@ -228,9 +242,9 @@ const assignManager = {
     if (!siteSettings
         || userContextId === siteSettings.userContextId
         || tab.incognito
-        || this.storageArea.isExempted(options.url, tab.id)) {
+        || this.storageArea.isExempted(options.url, tab.id)) { console.log("Exempted."); 
       return {};
-    }
+    } 
     const removeTab = backgroundLogic.NEW_TAB_PAGES.has(tab.url)
       || (messageHandler.lastCreatedTab
         && messageHandler.lastCreatedTab.id === tab.id);
@@ -432,6 +446,34 @@ const assignManager = {
     return false;
   },
 
+  async _setOrRemoveTransitionSettings(tabId, sourceContainerId, pageUrl, userContextId, remove) {
+    // https://github.com/mozilla/testpilot-containers/issues/626
+    // Context menu has stored context IDs as strings, so we need to coerce
+    // the value to a string for accurate checking
+    //userContextId = Number(userContextId);
+
+    if (!remove) {
+      await this.storageArea.setTransitionSettings(sourceContainerId, pageUrl, {
+        userContextId,
+        neverAsk: true
+      });
+    } else {
+      await this.storageArea.removeTransitionSettings(sourceContainerId, pageUrl);
+    } 
+    browser.tabs.sendMessage(tabId, {
+      text: `Successfully updated transition rules for ${pageUrl}.`
+    });
+    const tab = await browser.tabs.get(tabId);
+    this.calculateContextMenu(tab);
+  },
+
+  async _getTransitionSettings(sourceContainerId,tab) {
+    if (this.isTabPermittedAssign(tab)) {
+      return await this.storageArea.getTransitionSettings(sourceContainerId,tab.url);
+    } 
+    return false;
+  },
+
   _getByContainer(userContextId) {
     return this.storageArea.getByContainer(userContextId);
   },
@@ -507,7 +549,7 @@ const assignManager = {
     if (neverAsk) {
       browser.tabs.create({url, cookieStoreId, index, active, openerTabId}).then( (t) => {
             this.storageArea.setExempted(url,t.id);
-       } );
+       } ); 
     } else {
       let confirmUrl = `${loadPage}?url=${this.encodeURLProperty(url)}&cookieStoreId=${cookieStoreId}`;
       let currentCookieStoreId;

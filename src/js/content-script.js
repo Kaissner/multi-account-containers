@@ -46,11 +46,14 @@ browser.runtime.onMessage.addListener((message) => {
 });
 
 function middleClickInterceptor(e) {
-    if(e.which === 2) {
+    if(e.which === 2) { 
         var relevantAnchor = e.target.closest("a");
         if(relevantAnchor !== null) {
-            e.preventDefault();
-            browser.runtime.sendMessage({"method":"middleClick", "target":relevantAnchor.href});
+            const url = new window.URL(relevantAnchor.href);
+            if(url.hostname !== window.location.hostname) {
+                e.preventDefault(); 
+                browser.runtime.sendMessage({"method":"middleClick", "target":relevantAnchor.href});
+            }
         }
     }
 }

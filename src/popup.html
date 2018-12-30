@@ -97,19 +97,25 @@
 
   <div class="panel container-panel hide" id="container-panel">
     <div id="current-tab">
-      <h3>Current Tab</h3>
+      <!-- <h3>Current Tab</h3> -->
       <div id="current-page"></div>
       <label for="container-page-assigned">
         <input type="checkbox" id="container-page-assigned" />
         <span class="truncate-text">
-          Always open in
-          <span id="current-container"></span>
+          Open in
+          <span id="current-container"></span> by default
         </span>
       </label>
     </div>
-    <div class="container-panel-controls">
-      <a href="#" class="action-link" id="sort-containers-link" title="Sort tabs into container order">Sort Tabs</a>
+    <div class="transitions panel-footer">
+      <div class="edit-transition-rules-text panel-footer-secondary">
+        <a href="#" id="sort-containers-link" title="Sort tabs into container order">Sort Tabs</a>
+      </div>
+      <div class="edit-transition-rules-text panel-footer-secondary">
+        <a href="#" tabindex="0" title="Choose containers to open this page based on origin" id="edit-transition-rules-link">Edit Transition Rules</a>
+      </div>
     </div>
+
     <div class="scrollable panel-content" tabindex="-1">
       <table class="identities-list">
         <tbody></tbody>
@@ -122,6 +128,32 @@
       <a href="#" tabindex="0" class="add-container-link pop-button" id="container-add-link" title="Create new container">
         <img class="pop-button-image-small icon" alt="Create new container icon" src="/img/container-add.svg" />
       </a>
+    </div>
+  </div>
+
+  <div class="hide panel transition-target-panel" id="transition-target-panel" tabindex="-1">
+    <div class="columns">
+      <div class="panel-back-arrow" id="close-transition-target-panel">
+        <img alt="Panel Back Arrow" src="/img/container-arrow.svg" class="back-arrow-img" />
+      </div>
+      <div class="column-panel-content">
+        <div class="panel-header">
+          <h3 class="panel-header-text">Choose a Container</h3>
+        </div>
+        <div style="margin: -5px 5px 5px 5px">
+          For URL: <span id="target-url"></span> <br />
+          When opened from:<span class="userContext-icon-wrapper">
+           <span class="usercontext-icon" id="source-container-icon">
+             &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+           </span>
+          </span><span id="source-container-name"></span>
+        </div>
+        <div class="scrollable panel-content" tabindex="-1">
+          <table class="target-identities-list">
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
 

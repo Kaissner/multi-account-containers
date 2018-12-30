@@ -23,6 +23,7 @@ const P_CONTAINER_INFO   = "containerInfo";
 const P_CONTAINER_EDIT   = "containerEdit";
 const P_CONTAINER_DELETE = "containerDelete";
 const P_CONTAINERS_ACHIEVEMENT = "containersAchievement";
+const P_TRANSITION_TARGET= "pickTransitionTarget";
 
 /**
  * Escapes any occurances of &, ", <, > or / with XML entities.
@@ -204,6 +205,17 @@ const Logic = {
     return (userContextId !== cookieStoreId) ? Number(userContextId) : false;
   },
 
+  cookieStoreId(userContextId) {
+    if(userContextId)
+      return `firefox-container-${userContextId}`;
+    else return undefined;
+  },
+
+  identityByUserContextId(userContextId) {
+    const cookieStoreId = this.cookieStoreId(userContextId);
+    return this._identities.find( identity => { return identity.cookieStoreId === cookieStoreId; } );
+  },
+
   async currentTab() {
     const activeTabs = await browser.tabs.query({active: true, windowId: browser.windows.WINDOW_ID_CURRENT});
     if (activeTabs.length > 0) {
@@ -288,12 +300,12 @@ const Logic = {
     document.querySelector(this.getPanelSelector(this._panels[panel])).classList.remove("hide");
   },
 
-  showPreviousPanel() {
+  async showPreviousPanel() {
     if (!this._previousPanel) {
       throw new Error("Current panel not set!");
     }
 
-    this.showPanel(this._previousPanel, this._currentIdentity);
+    await this.showPanel(this._previousPanel, this._currentIdentity);
   },
 
   registerPanel(panelName, panelObject) {
@@ -330,6 +342,25 @@ const Logic = {
     return browser.runtime.sendMessage({
       method: "deleteContainer",
       message: {userContextId}
+    });
+  },
+
+  getTransitionSettings(sourceContainerId,tab) {
+    return browser.runtime.sendMessage({
+      method: "getTransitionSettings",
+      sourceContainerId: sourceContainerId,
+      tabId: tab.id
+    });
+  },
+
+  setOrRemoveTransitionSettings(tabId, sourceContainerId, url, userContextId, value) {
+    return browser.runtime.sendMessage({
+      method: "setOrRemoveTransitionSettings",
+      tabId,
+      sourceContainerId,
+      url,
+      userContextId,
+      value
     });
   },
 
@@ -377,6 +408,31 @@ const Logic = {
         return defaultName + (id < 10 ? "0" : "") + id;
       }
     }
+  },
+
+  renderTransitionRules(element,page) {
+     const fragment = document.createDocumentFragment();
+
+     const tr_in = document.createElement("tr");
+     this._identities.forEach(identity => {
+       const td_in = document.createElement("td");
+       const td_out= document.createElement("td");
+
+       td_in.title = escaped`When opened from ${identity.name}...`;
+       td_in.innerHTML = escaped`
+         <div class="userContext-icon-wrapper open-newtab" style="margin:0px">
+           <div class="usercontext-icon"
+              data-identity-icon="${identity.icon}"
+              data-identity-color="${identity.color}" style="background-color: ${identity.color}">
+           </div>
+         </div>`;
+
+   
+       tr_in.appendChild(td_in);
+     });
+
+     fragment.appendChild(tr_in);
+     element.appendChild(fragment);
   },
 };
 
@@ -523,6 +579,10 @@ Logic.registerPanel(P_CONTAINERS_LIST, {
       }
     });
 
+    Logic.addEnterHandler(document.querySelector("#edit-transition-rules-link"), async () => {
+      await this.startEditTransitions();
+    });
+
     document.addEventListener("keydown", (e) => {
       const selectables = [...document.querySelectorAll("[tabindex='0'], [tabindex='-1']")];
       const element = document.activeElement;
@@ -606,7 +666,7 @@ Logic.registerPanel(P_CONTAINERS_LIST, {
       const siteSettings = await Logic.getAssignment(currentTab);
       this.setupAssignmentCheckbox(siteSettings, currentTabUserContextId);
       const currentPage = document.getElementById("current-page");
-      currentPage.innerHTML = escaped`<span class="page-title truncate-text">${currentTab.title}</span>`;
+      currentPage.innerHTML = escaped`<h3 class="page-title truncate-text">${currentTab.title}</h3>`;
       const favIconElement = Utils.createFavIconElement(currentTab.favIconUrl || "");
       currentPage.prepend(favIconElement);
 
@@ -617,17 +677,35 @@ Logic.registerPanel(P_CONTAINERS_LIST, {
     }
   },
 
+  async startEditTransitions() {
+    const currentTab = await Logic.currentTab();
+    Logic.identities().forEach(async identity => {
+      const tbtn = document.getElementById(escaped`ctx${identity.cookieStoreId}t`);
+      const siteSettings = await Logic.getTransitionSettings(Logic.userContextId(identity.cookieStoreId),currentTab);
+ 
+      const targetIdentity = Logic.identityByUserContextId(siteSettings.userContextId); 
+
+      tbtn.parentNode.removeAttribute("hidden");
+      tbtn.innerHTML=escaped`
+        <div class="userContext-icon-wrapper clickable-no-icon-change pick-transition">
+          <div class="usercontext-icon"
+            data-identity-icon="${targetIdentity.icon}"
+            data-identity-color="${targetIdentity.color}" style="width:24px">
+          </div>
+        </div>`;
+    });
+  },
+
   // This method is called when the panel is shown.
   async prepare() {
     const fragment = document.createDocumentFragment();
 
-    this.prepareCurrentTabHeader();
-
-    Logic.identities().forEach(identity => {
+     Logic.identities().forEach(identity => {
       const hasTabs = (identity.hasHiddenTabs || identity.hasOpenTabs);
       const tr = document.createElement("tr");
       const context = document.createElement("td");
       const manage = document.createElement("td");
+      const transition = document.createElement("td");
 
       tr.classList.add("container-panel-row");
 
@@ -651,9 +729,14 @@ Logic.registerPanel(P_CONTAINERS_LIST, {
 
       tr.appendChild(context);
 
-      if (hasTabs) {
+      transition.setAttribute("hidden", "1");
+      transition.classList.add("pick-transition", "clickable-no-icon-change", "pop-button");
+      transition.innerHTML = escaped`<img src='/img/container-transition.svg' class='pop-button-image-small' width='20px' /><div class="pick-transition" id="ctx${identity.cookieStoreId}t"></div>`;
+      tr.appendChild(transition);
+   
+      //if (hasTabs) {
         tr.appendChild(manage);
-      }
+      //}
 
       Logic.addEnterHandler(tr, async function (e) {
         if (e.target.matches(".open-newtab")
@@ -667,11 +750,16 @@ Logic.registerPanel(P_CONTAINERS_LIST, {
           } catch (e) {
             window.close();
           }
+        } else if (e.target.matches(".pick-transition")
+                   || e.target.parentNode.matches(".pick-transition")) {
+          Logic.showPanel(P_TRANSITION_TARGET, identity);
         } else if (hasTabs) {
           Logic.showPanel(P_CONTAINER_INFO, identity);
         }
       });
     });
+
+    this.prepareCurrentTabHeader();
 
     const list = document.querySelector(".identities-list tbody");
 
@@ -700,6 +788,110 @@ Logic.registerPanel(P_CONTAINERS_LIST, {
     return Promise.resolve();
   },
 });
+
+// P_TRANSITION_TARGET: Choose what container to open a URL in, based on the container the request came from.
+// ----------------------------------------------------------------------------
+
+Logic.registerPanel(P_TRANSITION_TARGET, {
+  panelSelector: "#transition-target-panel",
+
+  // This method is called when the object is registered.
+  async initialize() {
+    Logic.addEnterHandler(document.querySelector("#close-transition-target-panel"), async () => {
+      await Logic.showPreviousPanel();
+      // TODO: this is extremely fishy; add proper way of messaging panel 
+      await Logic._panels[Logic._currentPanel].startEditTransitions();
+    });
+
+  },
+
+  // This method is called when the panel is shown.
+  async prepare() {
+    const identity = Logic.currentIdentity();
+    const currentTab = await Logic.currentTab();
+    
+    // Populating the panel: current URL
+    const url = new window.URL(currentTab.url);
+    document.getElementById("target-url").textContent = url.hostname;
+  
+    // Populating the panel: name and icon
+    document.getElementById("source-container-name").textContent = identity.name;
+
+    const icon = document.getElementById("source-container-icon");
+    icon.setAttribute("data-identity-icon", identity.icon);
+    icon.setAttribute("data-identity-color", identity.color);
+
+    // Populating the panel: possible target containers
+    const fragment = document.createDocumentFragment();
+
+    Logic.identities().forEach(identity => {
+      const tr = document.createElement("tr");
+      const context = document.createElement("td");
+
+      tr.classList.add("container-panel-row");
+
+      context.classList.add("userContext-wrapper", "choose-target", "clickable-no-icon-change");
+      context.setAttribute("tabindex", "0");
+      context.title = escaped`Open in ${identity.name}`;
+      context.innerHTML = escaped`
+        <div class="userContext-icon-wrapper choose-target">
+          <div class="usercontext-icon"
+            data-identity-icon="${identity.icon}"
+            data-identity-color="${identity.color}">
+          </div>
+        </div>
+        <div class="container-name truncate-text"></div>`;
+      context.querySelector(".container-name").textContent = identity.name;
+
+      fragment.appendChild(tr);
+
+      tr.appendChild(context);
+
+      Logic.addEnterHandler(tr, async function (e) {
+        if (e.target.matches(".choose-target")
+            || e.target.parentNode.matches(".choose-target")
+            || e.type === "keydown") {
+          Logic.setOrRemoveTransitionSettings(currentTab.id, Logic.userContextId(Logic.currentIdentity().cookieStoreId), currentTab.url, Logic.userContextId(identity.cookieStoreId), false);
+          await Logic.showPreviousPanel();
+          // TODO: another instance of fishiness
+          await Logic._panels[Logic._currentPanel].startEditTransitions();
+        }
+      });
+    });
+
+    const tr = document.createElement("tr");
+    const context = document.createElement("td");
+
+    tr.classList.add("container-panel-row");
+
+    context.classList.add("userContext-wrapper", "choose-target", "clickable-no-icon-change");
+    context.setAttribute("tabindex", "0");
+    context.title = escaped`Open in default container`;
+    context.innerHTML = escaped`Default container`;
+
+    fragment.appendChild(tr);
+
+    tr.appendChild(context);
+
+    Logic.addEnterHandler(tr, async function (e) {
+        if (e.target.matches(".choose-target")
+            || e.target.parentNode.matches(".choose-target")
+            || e.type === "keydown") {
+          Logic.setOrRemoveTransitionSettings(currentTab.id, Logic.userContextId(Logic.currentIdentity().cookieStoreId), currentTab.url, false, false);
+          await Logic.showPreviousPanel();
+          // TODO: another instance of fishiness
+          await Logic._panels[Logic._currentPanel].startEditTransitions();
+        }
+    });
+
+    const list = document.querySelector(".target-identities-list tbody");
+
+    list.innerHTML = "";
+    list.appendChild(fragment);
+  },
+
+});
+
 
 // P_CONTAINER_INFO: More info about a container.
 // ----------------------------------------------------------------------------
