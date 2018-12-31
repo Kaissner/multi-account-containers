@@ -113,7 +113,6 @@ const assignManager = {
     },
 
     setTransitionSettings(sourceContainerId, pageUrl, data) {
-      console.log(`setTransitionSettings(${sourceContainerId},${pageUrl},${JSON.stringify(data)})`);
       if(pageUrl) {
         const transitionStoreKey = this.getTransitionStoreKey(sourceContainerId, pageUrl);
         return this.area.set({ [transitionStoreKey]: data });
@@ -175,14 +174,19 @@ const assignManager = {
     this.storageArea.setExempted(pageUrl, m.tabId);
     return true;
   },
-  async computeSiteSettings(sourceContextId, url) {
-    console.log(`computeSiteSettings(${sourceContextId},${url})`);
-    if(sourceContextId === false) {
+  async computeSiteSettings(sourceContextId, url, hasOriginUrl=false) {
+    console.log(`computeSiteSettings(${sourceContextId},${url},${hasOriginUrl})`);
+    //  If we don't have an origin URL, the request was manually initiated by the user,
+    // and so should not be treated as a container transition;
+    // we instead fall back to old-style container assignments.
+    //  We also currently use the old-style container assignments for transitions from
+    // the default container. Perhaps this should be changed.
+    if(!hasOriginUrl || sourceContextId === false) {
       const siteSettings = await this.storageArea.get(url);
       if(siteSettings) {
         return siteSettings;
       } else {
-        return {userContextId:false, neverAsk:true};
+        return {userContextId:sourceContextId, neverAsk:true};
       }
     } else {
       const siteSettings = await this.storageArea.getTransitionSettings(sourceContextId, url);
@@ -197,7 +201,7 @@ const assignManager = {
     console.log(`openInNewTab(${sourceTabId},${url})`);
     const tab = await browser.tabs.get(sourceTabId);
     const sourceContextId = this.getUserContextIdFromCookieStore(tab);
-    const siteSettings = await this.computeSiteSettings(sourceContextId, url); 
+    const siteSettings = await this.computeSiteSettings(sourceContextId, url, true); 
     this.reloadPageInContainer(
       url,
       sourceContextId,
@@ -220,7 +224,7 @@ const assignManager = {
     // need to sequence these requests now
     const tab = await browser.tabs.get(options.tabId); 
     const userContextId = this.getUserContextIdFromCookieStore(tab); 
-    const siteSettings = await this.computeSiteSettings(userContextId, options.url);
+    const siteSettings = await this.computeSiteSettings(userContextId, options.url, Boolean(options.originUrl));
     
     let container;
     try {
@@ -236,7 +240,7 @@ const assignManager = {
       this.deleteContainer(siteSettings.userContextId);
       return {};
     }
-    
+    console.log(options); 
     // If a page has been opened in a nonstandard container, the exemption flag for that
     //   tab will have been set, so following links in the same tab will not trigger new
     //   prompts about the container in which to open the page. However, opening links
