@@ -198,19 +198,25 @@ const assignManager = {
     }
   },
   async openInNewTab(sourceTabId, url) {
-    console.log(`openInNewTab(${sourceTabId},${url})`);
+    //console.log(`openInNewTab(${sourceTabId},${url})`);
     const tab = await browser.tabs.get(sourceTabId);
-    const sourceContextId = this.getUserContextIdFromCookieStore(tab);
-    const siteSettings = await this.computeSiteSettings(sourceContextId, url, true); 
-    this.reloadPageInContainer(
-      url,
-      sourceContextId,
-      siteSettings.userContextId,
-      null,
-      false,
-      siteSettings.neverAsk,
-      sourceTabId
-    );
+    if(tab.incognito) { 
+      browser.tabs.create({url, cookieStoreId: tab.cookieStoreId, active:false, openerTabId:sourceTabId}).then( (t) => {
+            this.storageArea.setExempted(url,t.id);
+       } ); 
+    } else {
+      const sourceContextId = this.getUserContextIdFromCookieStore(tab);
+      const siteSettings = await this.computeSiteSettings(sourceContextId, url, true); 
+      this.reloadPageInContainer(
+        url,
+        sourceContextId,
+        siteSettings.userContextId,
+        null,
+        false,
+        siteSettings.neverAsk,
+        sourceTabId
+      );
+    }
   },
 
   // Before a request is handled by the browser we decide if we should route through a different container
