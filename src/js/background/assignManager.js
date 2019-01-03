@@ -61,7 +61,8 @@ const assignManager = {
       });
     },
 
-    getTransitionSettings(sourceContainerId, pageUrl) { console.log(`gTS(${sourceContainerId},${pageUrl})`);
+    getTransitionSettings(sourceContainerId, pageUrl) {
+      console.log(`gTS(${sourceContainerId},"${pageUrl}")`);
       const defaultTransitionKey = this.getDefaultTransitionStoreKey(sourceContainerId);
       if(!pageUrl) {
         return new Promise((resolve, reject) => {
@@ -201,6 +202,7 @@ const assignManager = {
     //console.log(`openInNewTab(${sourceTabId},${url})`);
     const tab = await browser.tabs.get(sourceTabId);
     if(tab.incognito) { 
+      // this exempts all forwards for the future, so we aren't worried about followup transitions
       browser.tabs.create({url, cookieStoreId: tab.cookieStoreId, active:false, openerTabId:sourceTabId}).then( (t) => {
             this.storageArea.setExempted(url,t.id);
        } ); 
@@ -229,7 +231,15 @@ const assignManager = {
 
     // need to sequence these requests now
     const tab = await browser.tabs.get(options.tabId); 
-    const userContextId = this.getUserContextIdFromCookieStore(tab); 
+
+    // early exemption
+    if (tab.incognito
+        || this.storageArea.isExempted(options.url, tab.id)) {
+      console.log("Exempted."); 
+      return {};
+    }
+
+    const userContextId = this.getUserContextIdFromCookieStore(tab);
     const siteSettings = await this.computeSiteSettings(userContextId, options.url, Boolean(options.originUrl));
     
     let container;
@@ -264,9 +274,8 @@ const assignManager = {
     }
 
     if (!siteSettings
-        || userContextId === siteSettings.userContextId
-        || tab.incognito
-        || this.storageArea.isExempted(options.url, tab.id)) { console.log("Exempted."); 
+        || userContextId === siteSettings.userContextId) {
+      console.log("No transition."); 
       return {};
     } 
     const removeTab = backgroundLogic.NEW_TAB_PAGES.has(tab.url)
