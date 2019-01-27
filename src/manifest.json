@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Containers with Transitions",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Containers with Transitions is a fork of Multi-Account Containers that provides transition rules, which let you choose the container to open a page based on the container it was opened from. It also adds other improvements aiming to minimise papercuts and unwanted prompts.",
   "icons": {
     "48": "img/container-site-d-48.png",
