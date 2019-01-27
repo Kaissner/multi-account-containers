@@ -3,7 +3,6 @@ const messageHandler = {
   // We use this to catch redirected tabs that have just opened
   // If this were in platform we would change how the tab opens based on "new tab" link navigations such as ctrl+click
   LAST_CREATED_TAB_TIMER: 2000,
-  unhideQueue: [],
 
   init() {
     // Handles messages from webextension code
@@ -45,7 +44,7 @@ const messageHandler = {
         backgroundLogic.sortTabs();
         break;
       case "showTabs":
-        this.unhideContainer(m.cookieStoreId);
+        backgroundLogic.unhideContainer(m.cookieStoreId);
         break;
       case "hideTabs":
         backgroundLogic.hideTabs({
@@ -165,7 +164,7 @@ const messageHandler = {
           this.incrementCountOfContainerTabsOpened();
         }
 
-        this.unhideContainer(tab.cookieStoreId);
+        backgroundLogic.unhideContainer(tab.cookieStoreId);
       }
       setTimeout(() => {
         this.lastCreatedTab = null;
@@ -188,17 +187,6 @@ const messageHandler = {
       browser.storage.local.set({achievements});
       browser.browserAction.setBadgeBackgroundColor({color: "rgba(0,217,0,255)"});
       browser.browserAction.setBadgeText({text: "NEW"});
-    }
-  },
-
-  async unhideContainer(cookieStoreId) {
-    if (!this.unhideQueue.includes(cookieStoreId)) {
-      this.unhideQueue.push(cookieStoreId);
-      // Unhide all hidden tabs
-      await backgroundLogic.showTabs({
-        cookieStoreId
-      });
-      this.unhideQueue.splice(this.unhideQueue.indexOf(cookieStoreId), 1);
     }
   },
 

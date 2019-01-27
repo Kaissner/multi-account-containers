@@ -2,13 +2,14 @@
   "name": "containers-with-transitions",
   "title": "Containers with Transitions",
   "description": "Containers with Transitions is a fork of Multi-Account Containers that provides transition rules, which let you choose the container to open a page based on the container it was opened from. It also adds other improvements aiming to minimise papercuts and unwanted prompts.",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "author": "Matvey Soloviev",
   "bugs": {
     "url": "https://github.com/blackhole89/multi-account-containers/issues"
   },
   "dependencies": {},
   "devDependencies": {
+    "ajv": "^6.6.2",
     "addons-linter": "^1.3.2",
     "chai": "^4.1.2",
     "eslint": "^3.17.1",
