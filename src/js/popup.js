@@ -603,7 +603,9 @@ Logic.registerPanel(P_CONTAINERS_LIST, {
     });
 
     document.addEventListener("keydown", (e) => {
-      const selectables = [...document.querySelectorAll("[tabindex='0'], [tabindex='-1']")];
+      const selectables = [...document.querySelectorAll("[tabindex='0']")];
+      // no idea why this was here --MS
+      //  [...document.querySelectorAll("[tabindex='0'], [tabindex='-1']")];
       const element = document.activeElement;
       const index = selectables.indexOf(element) || 0;
       function next() {
@@ -718,7 +720,7 @@ Logic.registerPanel(P_CONTAINERS_LIST, {
       tbtn.parentNode.removeAttribute("hidden");
       tbtn.innerHTML=`
         <div class="userContext-icon-wrapper clickable-no-icon-change pick-transition">
-          ${Logic.renderIdentityIcon(targetIdentity)}
+          ${Logic. tabindex="0"renderIdentityIcon(targetIdentity)}
         </div>`;
     });
   },
