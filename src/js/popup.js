@@ -720,7 +720,7 @@ Logic.registerPanel(P_CONTAINERS_LIST, {
       tbtn.parentNode.removeAttribute("hidden");
       tbtn.innerHTML=`
         <div class="userContext-icon-wrapper clickable-no-icon-change pick-transition">
-          ${Logic. tabindex="0"renderIdentityIcon(targetIdentity)}
+          ${Logic.renderIdentityIcon(targetIdentity)}
         </div>`;
     });
   },
